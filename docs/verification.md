@@ -37,6 +37,12 @@ Editor 6000.6.4f1 / Play モード中に `unity command runtime simulate_key` �
 
 注意: 実機確認はEditorが非フォーカスでも進む設定で行った。TIME UP文字がアイテムと重なる(見た目の軽微な課題)。クリア後の入力停止(前回の問題1)は今回未対応。
 
+## クリア後の入力停止(問題点1の対応)
+
+`PlayerController` の移動を `manager.IsPlaying`(クリアでも時間切れでもない間)に限定。Rは常に有効。
+- 自動テスト追加: `AfterClear_InputIsIgnored_ClearStaysUntilR`(クリア後にW1.5秒・A・Sを押しても座標不変・CLEAR維持、Rで再開)。EditMode 12/12、PlayMode 9/9 合格。
+- 実機: クリア後にW3秒+さらに3秒押し続け、Aも1.5秒追加 → 座標(0,0.5,7.15)のまま、CLEAR表示と残り時間24.64は不変。Rで(0,0.5,-7)・0/5・30秒へ復帰。以前はW長押しで奥の端から落ちてCLEARが消えていた。根拠画像 `evidence/after_clear_input_locked.png`。
+
 ## 動画
 
 `evidence/playthrough.mp4`(約24秒、Editor画面)。D→A→S→W(回収)→R→全回収でCLEAR→クリア後R→回収後に右端から落下→リセット。

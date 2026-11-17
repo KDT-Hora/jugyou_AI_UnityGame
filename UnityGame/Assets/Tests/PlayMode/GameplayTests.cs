@@ -139,6 +139,26 @@ public class GameplayTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator AfterClear_InputIsIgnored_ClearStaysUntilR()
+    {
+        yield return null;
+        yield return Hold(Key.W, 2.8f);
+        Assert.IsTrue(gm.IsCleared);
+        yield return new WaitForSeconds(0.3f);            // 慣性で動いていないことを確認する基準点
+        var p0 = pc.transform.position;
+        yield return Hold(Key.W, 1.5f);                   // 本来なら奥の端から落ちる長さ
+        yield return Hold(Key.A, 1.0f);
+        yield return Hold(Key.S, 1.0f);
+        Assert.IsTrue(gm.IsCleared, "クリアが維持される");
+        Assert.AreEqual(p0.x, pc.transform.position.x, 0.05f);
+        Assert.AreEqual(p0.z, pc.transform.position.z, 0.05f);
+        yield return Hold(Key.R, 0.2f);
+        yield return null;
+        Assert.IsFalse(gm.IsCleared);
+        Assert.AreEqual(0, gm.CollectedCount);
+    }
+
+    [UnityTest]
     public IEnumerator TimerCountsDown_InRealTime()
     {
         yield return null;

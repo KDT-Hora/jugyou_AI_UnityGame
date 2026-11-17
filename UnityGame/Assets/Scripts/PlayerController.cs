@@ -38,8 +38,8 @@ public class PlayerController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // 時間切れ後は移動できない(Rと落下判定はUpdateで生きている)
-        bool canMove = manager == null || !manager.IsTimeUp;
+        // クリア後・時間切れ後は移動できない(RはUpdateで生きている)
+        bool canMove = manager == null || manager.IsPlaying;
         var v = canMove ? new Vector3(move.x, 0f, move.y).normalized * moveSpeed : Vector3.zero;
         Body.linearVelocity = new Vector3(v.x, Body.linearVelocity.y, v.z);
     }
