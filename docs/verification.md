@@ -12,6 +12,34 @@ Editor 6000.6.4f1 / Play モード中に `unity command runtime simulate_key` �
 | B6 R(途中) | 1個回収後にR | 初期状態へ | cnt=0 items=5 pos=(0,0.5,-7) | 状態取得 | 確認済み |
 | B6 R(クリア後) | CLEAR後にR | 初期状態へ | cnt=0 clearUI=False items=5 | 状態取得 | 確認済み |
 
+## 自動テスト結果
+
+`unity command test run`(Editor内実行)。**EditMode 5/5 合格、PlayMode 6/6 合格、失敗0・スキップ0**。
+
+- EditMode(`Assets/Tests/EditMode/GameLogicTests.cs`): 初期状態 / 同一アイテム二重回収で1 / 4個では未クリア・5個でクリア / ResetGameで全初期化 / null回収で無変化
+- PlayMode(`Assets/Tests/PlayMode/GameplayTests.cs`、仮想キーボード): W=+Z、A=-X・D=+X、S=-Z、W長押しで5個回収しクリア、R途中リセット、床から落下でリセット
+- 初回のEditMode実行は5件全失敗: `PlayerController` が `Awake` で取得する Rigidbody が EditMode では未初期化(NullReference)。遅延取得に修正して合格。
+
+## 動画
+
+`evidence/playthrough.mp4`(約24秒、Editor画面)。D→A→S→W(回収)→R→全回収でCLEAR→クリア後R→回収後に右端から落下→リセット。
+各操作後の座標・回収数は `evidence/playthrough_log.txt`。ログと動画の内容は一致。
+
+## 洗い出した問題点
+
+| # | 問題 | 重さ | 根拠 |
+|---|---|---|---|
+| 1 | **CLEAR後も操作でき、そのまま落ちるとCLEARが消える**。W長押しで奥の端(Z=10)から落下→0/5へ全リセット。1回目の録画で再現(W 3秒→CLEAR出ずリセット) | 高 | 録画ログ(初回) |
+| 2 | 落下の予兆がない。壁・縁の目印がなく、床の端で突然リセットされる | 中 | 動画 |
+| 3 | 奥側ではカメラが遠く、球とアイテムが小さい。CLEAR文字が球の真上に重なる | 中 | `b4_clear.png` |
+| 4 | 擬似入力は `wasPressedThisFrame` が立たない。Rは立ち上がり検出+`wasPressedThisFrame`併用に修正済み。実キーボードでの確認は未実施 | 中 | 実験で再現 |
+| 5 | 速度を直接代入しており、慣性・加速がない(止まると即停止)。球らしい挙動ではない | 低 | 速度ログ vel=0 |
+| 6 | Game ビューが非フォーカスだと実キー入力が無効になる設定(`PointersAndKeyboardsRespectGameViewFocus`)。Editor操作時の注意点 | 低 | Input System設定 |
+| 7 | UIは旧 `UnityEngine.UI.Text`+組込フォント。日本語表示や解像度対応が弱い | 低 | コード |
+| 8 | ビルド/実機未検証(範囲外)。クラウド未連携 | 情報 | - |
+
+問題1・2は仕様(B5)上は正しい挙動だが、遊びとしては不親切。要判断: クリア後は入力を止めるか、床に壁を付けるか。
+
 ## 不具合と対応
 
 - 擬似入力(`simulate_key`)は押下状態だけを書き込み、`wasPressedThisFrame` が立たなかった。Rは `isPressed` の立ち上がり検出に変更。

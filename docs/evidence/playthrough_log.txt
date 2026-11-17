@@ -1,0 +1,10 @@
+16:55:04.414 1 initial              (0.00, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:05.696 2 after D              (3.36, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:06.974 3 after A              (0.00, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:08.054 4 after S              (0.00, 0.50, -9.16) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:10.033 5 after W (collect)    (0.00, 0.50, -2.80) vel=(0.00, 0.00, 0.00) cnt=1 text=1/5 clearUI=False items=4
+16:55:11.418 6 after R mid-game     (0.00, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:15.481 7 after full W (clear) (0.00, 0.50, 7.75) vel=(0.00, 0.00, 0.00) cnt=5 text=5/5 clearUI=True items=0
+16:55:17.249 8 after R post-clear   (0.00, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5
+16:55:18.637 9 1 item collected     (0.00, 0.50, -1.84) vel=(0.00, 0.00, 0.00) cnt=2 text=2/5 clearUI=False items=3
+16:55:22.914 10 after fall          (0.00, 0.50, -7.00) vel=(0.00, 0.00, 0.00) cnt=0 text=0/5 clearUI=False items=5

@@ -13,7 +13,7 @@ public class PlayerController : MonoBehaviour
     Vector2 move;
     bool rPrev;
 
-    void Awake() => rb = GetComponent<Rigidbody>();
+    Rigidbody Body => rb != null ? rb : (rb = GetComponent<Rigidbody>());
 
     void Update()
     {
@@ -28,7 +28,8 @@ public class PlayerController : MonoBehaviour
 
         // isPressed の立ち上がりで検出(擬似入力でも実キーでも動く)
         bool rNow = kb.rKey.isPressed;
-        bool rDown = rNow && !rPrev;
+        // 1フレーム未満の短いタップは wasPressedThisFrame で拾う
+        bool rDown = (rNow && !rPrev) || kb.rKey.wasPressedThisFrame;
         rPrev = rNow;
 
         if (rDown) manager.ResetGame();
@@ -38,15 +39,15 @@ public class PlayerController : MonoBehaviour
     void FixedUpdate()
     {
         var v = new Vector3(move.x, 0f, move.y).normalized * moveSpeed;
-        rb.linearVelocity = new Vector3(v.x, rb.linearVelocity.y, v.z);
+        Body.linearVelocity = new Vector3(v.x, Body.linearVelocity.y, v.z);
     }
 
     public void ResetPlayer()
     {
         move = Vector2.zero;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-        rb.position = startPosition;
+        Body.linearVelocity = Vector3.zero;
+        Body.angularVelocity = Vector3.zero;
+        Body.position = startPosition;
         transform.position = startPosition;
         transform.rotation = Quaternion.identity;
     }
