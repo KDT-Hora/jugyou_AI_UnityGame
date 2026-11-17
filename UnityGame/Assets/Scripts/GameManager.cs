@@ -12,6 +12,12 @@ public class GameManager : MonoBehaviour
     public Text timeUpText;
     public float timeLimit = 30f;
 
+    // 演出用イベント(ロジックは演出を知らない)
+    public event System.Action<Collectible> ItemCollected;
+    public event System.Action GameCleared;
+    public event System.Action TimeUpReached;
+    public event System.Action GameReset;
+
     public int CollectedCount { get; private set; }
     public bool IsCleared { get; private set; }
     public bool IsTimeUp { get; private set; }
@@ -33,6 +39,7 @@ public class GameManager : MonoBehaviour
         {
             RemainingTime = 0f;
             IsTimeUp = true;              // A2
+            TimeUpReached?.Invoke();
         }
         UpdateUI();
     }
@@ -47,6 +54,8 @@ public class GameManager : MonoBehaviour
         // (物理の回収判定はUpdateより先に走るため、Tickで時間切れになる前にここへ来る)
         if (CollectedCount >= items.Count) IsCleared = true;
         UpdateUI();
+        ItemCollected?.Invoke(item);
+        if (IsCleared) GameCleared?.Invoke();
     }
 
     public void ResetGame()
@@ -58,6 +67,7 @@ public class GameManager : MonoBehaviour
         foreach (var i in items) i.ResetItem();
         if (player != null) player.ResetPlayer();
         UpdateUI();
+        GameReset?.Invoke();
     }
 
     void UpdateUI()

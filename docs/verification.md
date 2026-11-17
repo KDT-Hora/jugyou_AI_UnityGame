@@ -43,6 +43,15 @@ Editor 6000.6.4f1 / Play モード中に `unity command runtime simulate_key` �
 - 自動テスト追加: `AfterClear_InputIsIgnored_ClearStaysUntilR`(クリア後にW1.5秒・A・Sを押しても座標不変・CLEAR維持、Rで再開)。EditMode 12/12、PlayMode 9/9 合格。
 - 実機: クリア後にW3秒+さらに3秒押し続け、Aも1.5秒追加 → 座標(0,0.5,7.15)のまま、CLEAR表示と残り時間24.64は不変。Rで(0,0.5,-7)・0/5・30秒へ復帰。以前はW長押しで奥の端から落ちてCLEARが消えていた。根拠画像 `evidence/after_clear_input_locked.png`。
 
+## 画面の派手化(ドパガキ向け演出)
+
+ロジックには触れず、`GameManager` のイベント(`ItemCollected` / `GameCleared` / `TimeUpReached` / `GameReset`)を `Juice` が聞いて演出する構成。
+- 見た目: 紫の背景、ピンク×水色のチェッカー床、光るピンクの球+虹色トレイル、虹色に脈打って浮くアイテム、漂うキラキラ、ブルーム・彩度・ビネット。
+- 演出: 回収で粒子爆発+カウント拡大+画面揺れ、CLEARで紙吹雪+虹色に跳ねる文字+大きな揺れ、残り10秒以下で時間が赤く脈打つ、TIME UPで文字が震えて画面揺れ。
+- 確認: EditMode 12/12・PlayMode 9/9 合格のまま。Play中のコンソールは警告・エラー0。画像 `evidence/pop_1_initial.png` `pop_2_collect.png` `pop_3_clear.png`。
+- 途中で直した点: パーティクル速度カーブのモード不一致エラー(毎フレーム出ていた)、ブルーム過多によるアイテムの白飛び。
+- 未確認/未実施: 残り10秒の赤点滅とTIME UPの震えは画像で未確認(コードのみ)。効果音は範囲外のため未実装(入れると更にそれらしくなる)。
+
 ## 動画
 
 `evidence/playthrough.mp4`(約24秒、Editor画面)。D→A→S→W(回収)→R→全回収でCLEAR→クリア後R→回収後に右端から落下→リセット。
