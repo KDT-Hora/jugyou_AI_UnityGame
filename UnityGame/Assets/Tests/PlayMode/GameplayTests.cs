@@ -171,28 +171,74 @@ public class GameplayTests : InputTestFixture
         Assert.IsFalse(gm.IsTimeUp);
     }
 
-    // レビュー指摘: 回収数の回転演出がクリア後に誤った数字で固まらないこと
-    [UnityTest]
-    public IEnumerator Juice_CountText_SettlesToRealValue_AfterClear()
+    // ---- パチンコ台 ----
+
+    // gmを先に渡してから有効化する(OnEnableでイベント購読するため)
+    PachinkoBoard MakeBoard()
     {
-        var camGo = new GameObject("Cam"); camGo.transform.SetParent(root.transform);
-        var cam = camGo.AddComponent<Camera>();
-        gm.countText.text = "";
-        var j = new GameObject("Juice").AddComponent<Juice>();
-        j.transform.SetParent(root.transform);
-        j.gm = gm; j.player = pc; j.cam = cam; j.countText = gm.countText;
-        j.rollDigitOverride = 9;     // 回転中は常に「9/5」。固まるバグがあれば最終値が"9/5"になり確実に落ちる
-        j.gameObject.SetActive(false); j.gameObject.SetActive(true);   // OnEnableでイベント購読
+        var go = new GameObject("Board");
+        go.SetActive(false);
+        go.transform.SetParent(root.transform);
+        var b = go.AddComponent<PachinkoBoard>();
+        b.gm = gm;
+        go.SetActive(true);
+        return b;
+    }
+
+    [UnityTest]
+    public IEnumerator Pachinko_CollectLaunchesBall_ThatFallsThroughPinsAndLeaves()
+    {
+        var board = MakeBoard();
         yield return null;
-        Press(kb[Key.W]);
-        float t0 = Time.time;
-        while (!gm.IsCleared && Time.time - t0 < 6f) yield return null;   // クリアした瞬間を捉える
-        Assert.IsTrue(gm.IsCleared);
-        yield return null;                                                // LateUpdateで回転表示が書かれる
-        Assert.AreEqual("9/5", gm.countText.text, "回転中は上書き表示になっている(前提の確認)");
-        Release(kb[Key.W]);
-        yield return new WaitForSeconds(1.0f);                            // 回転(0.45秒)が終わるまで待つ
-        Assert.AreEqual("5/5", gm.countText.text);
+        gm.Collect(gm.items[0]);
+        Assert.AreEqual(1, board.ActiveBallCount, "拾うと玉が1つ発射される");
+        yield return new WaitForSeconds(1.2f);
+        var ball = board.GetComponentInChildren<PachinkoBall>();
+        Assert.IsNotNull(ball);
+        Assert.IsFalse(ball.body.isKinematic, "盤に着いたら物理で動く");
+        Assert.AreEqual(PachinkoBoard.Z, ball.transform.position.z, 0.01f, "盤の上(z固定)で動く");
+        float timeout = Time.time + 35f;
+        while (board.ActiveBallCount > 0 && Time.time < timeout) yield return null;
+        Assert.AreEqual(0, board.ActiveBallCount, "ピンに引っかかり続けず、最後はアウト口へ落ちる");
+    }
+
+    [UnityTest]
+    public IEnumerator Pachinko_ResetClearsAllBalls()
+    {
+        var board = MakeBoard();
+        yield return null;
+        gm.Collect(gm.items[0]);
+        gm.Collect(gm.items[1]);
+        Assert.AreEqual(2, board.ActiveBallCount);
+        gm.ResetGame();
+        Assert.AreEqual(0, board.ActiveBallCount);
+        yield return new WaitForSeconds(1.0f);          // 飛行中のコルーチンも止まっている(玉が復活しない)
+        Assert.AreEqual(0, board.ActiveBallCount);
+    }
+
+    [UnityTest]
+    public IEnumerator Pachinko_BoardDoesNotInterfereWithStagePhysics()
+    {
+        var board = MakeBoard();
+        yield return null;
+        Assert.IsTrue(Physics.GetIgnoreLayerCollision(PachinkoBoard.Layer, 0), "盤はステージ(Default)と衝突しない");
+        float z0 = pc.transform.position.z;
+        yield return Hold(Key.W, 0.5f);
+        Assert.Greater(pc.transform.position.z, z0 + 1f, "盤があってもプレイヤーは普通に動ける");
+    }
+
+    [UnityTest]
+    public IEnumerator Pachinko_BallDroppedAboveHole_TriggersHoleEvent()
+    {
+        var board = MakeBoard();
+        yield return null;
+        int hit = -1;
+        board.HoleEntered += i => hit = i;
+        board.DropBallAt(new Vector3(0f, 1.95f, PachinkoBoard.Z));      // 中央の穴の真上
+        float timeout = Time.time + 3f;
+        while (hit < 0 && Time.time < timeout) yield return null;
+        Assert.AreEqual(1, hit, "中央の穴に入ったらイベントが出る");
+        Assert.AreEqual(1, board.HoleHits);
     }
 
     [UnityTest]

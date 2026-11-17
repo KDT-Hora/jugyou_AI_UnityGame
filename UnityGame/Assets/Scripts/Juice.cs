@@ -2,23 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// パチンコ/スロット風の演出担当。GameManagerのイベントと状態を読むだけで、ロジックには触れない。
+// 派手な演出担当。GameManagerのイベントと状態を読むだけで、ゲームロジックには触れない。
 public class Juice : MonoBehaviour
 {
     public GameManager gm;
     public PlayerController player;
     public Camera cam;
     public Material particleMat;
-    public Text countText, timeText, clearText, timeUpText, bannerText;
-    public Text[] reels;                    // 3リール
+    public Text countText, timeText, clearText, timeUpText;
     public Image flash;                     // 全画面フラッシュ
     public Transform backdrop;              // 回転する放射状の背景
     public Material backdropMat;
     public Material bulbOn, bulbOff, bulbRed;
-    [HideInInspector] public int rollDigitOverride = -1;   // テスト用: 回転中の数字を固定(-1で通常のランダム)
+    public PachinkoBoard board;             // 玉が穴に入った時の演出用
 
-    // 何個目でリールが止まるか(アイテム数から導出: 5個なら 1,3,5。最後は必ず全個数)
-    int ReelLockAt(int k) => gm.items.Count <= 1 ? 1 : 1 + Mathf.RoundToInt(k * (gm.items.Count - 1) / 2f);
     static readonly Color Gold = new Color(1f, 0.78f, 0.15f);
 
     ParticleSystem burst, confetti, coinRain;
@@ -29,11 +26,9 @@ public class Juice : MonoBehaviour
     float fovBase;
     Vector2 timeUpBase;
     float shakeT, shakeDur = 0.3f, shakeMag;
-    float countPunch, clearAge, secPunch, rollT, flashAlpha, strobeT, redT;
+    float countPunch, clearAge, secPunch, flashAlpha, strobeT, redT;
     int lastSec = -1;
     Color flashColor = Gold;
-    readonly float[] reelPunch = new float[3];
-    readonly bool[] reelWasLocked = new bool[3];
 
     void Awake()
     {
@@ -55,20 +50,26 @@ public class Juice : MonoBehaviour
 
     void OnEnable()
     {
-        if (gm == null) return;
-        gm.ItemCollected += OnCollected;
-        gm.GameCleared += OnCleared;
-        gm.TimeUpReached += OnTimeUp;
-        gm.GameReset += OnReset;
+        if (gm != null)
+        {
+            gm.ItemCollected += OnCollected;
+            gm.GameCleared += OnCleared;
+            gm.TimeUpReached += OnTimeUp;
+            gm.GameReset += OnReset;
+        }
+        if (board != null) board.HoleEntered += OnHole;
     }
 
     void OnDisable()
     {
-        if (gm == null) return;
-        gm.ItemCollected -= OnCollected;
-        gm.GameCleared -= OnCleared;
-        gm.TimeUpReached -= OnTimeUp;
-        gm.GameReset -= OnReset;
+        if (gm != null)
+        {
+            gm.ItemCollected -= OnCollected;
+            gm.GameCleared -= OnCleared;
+            gm.TimeUpReached -= OnTimeUp;
+            gm.GameReset -= OnReset;
+        }
+        if (board != null) board.HoleEntered -= OnHole;
     }
 
     // ---------- イベント ----------
@@ -76,7 +77,6 @@ public class Juice : MonoBehaviour
     {
         Emit(burst, item.transform.position, 30, 6f, Gold);
         countPunch = 0.7f;
-        rollT = 0.45f;                       // カウントがスロットのように回る
         Flash(Gold, 0.35f);
         Shake(0.12f, 0.2f);
     }
@@ -109,15 +109,21 @@ public class Juice : MonoBehaviour
         Shake(0.5f, 0.6f);
     }
 
+    // 玉がパチンコの穴に入った
+    void OnHole(int index)
+    {
+        Flash(new Color(1f, 0.9f, 0.4f), 0.3f);
+        Shake(0.1f, 0.15f);
+    }
+
     void OnReset()
     {
         if (trail != null) trail.Clear();
         // 前のラウンドの演出を持ち越さない
         burst.Clear(); confetti.Clear(); coinRain.Clear();
-        clearAge = 0f; strobeT = 0f; redT = 0f; rollT = 0f;
+        clearAge = 0f; strobeT = 0f; redT = 0f;
         flashAlpha = 0f; shakeT = 0f; countPunch = 0f; secPunch = 0f;
         lastSec = -1;
-        for (int k = 0; k < 3; k++) { reelWasLocked[k] = false; reelPunch[k] = 0f; }
         if (flash != null) { var c = flash.color; c.a = 0f; flash.color = c; }
     }
 
@@ -131,8 +137,7 @@ public class Juice : MonoBehaviour
         if (countText != null) countText.rectTransform.localScale = Vector3.one * (1f + countPunch);
 
         UpdateTimeText(dt);
-        UpdateClearTexts(dt);
-        UpdateReels(dt);
+        UpdateClearText(dt);
         UpdateBackdrop();
         UpdateBulbs();
         UpdateFlash(dt);
@@ -144,15 +149,6 @@ public class Juice : MonoBehaviour
     void LateUpdate()
     {
         if (cam == null) return;
-        // GameManager.UpdateUI が毎フレームテキストを書き換えるため、回転表示はLateUpdateで上書き
-        if (countText != null && rollT > 0f && gm != null)
-        {
-            rollT -= Time.deltaTime;
-            // 回転が終わったら必ず正しい値を書き戻す(クリア/時間切れ後はGameManagerが再描画しないため)
-            countText.text = rollT > 0f
-                ? $"{(rollDigitOverride >= 0 ? rollDigitOverride : (int)(Time.time * 30f) % 10)}/{gm.items.Count}"
-                : $"{gm.CollectedCount}/{gm.items.Count}";
-        }
         if (shakeT > 0f)
         {
             shakeT -= Time.deltaTime;
@@ -177,56 +173,13 @@ public class Juice : MonoBehaviour
             : Color.white;
     }
 
-    void UpdateClearTexts(float dt)
+    void UpdateClearText(float dt)
     {
-        bool cleared = gm != null && gm.IsCleared;
-        if (clearText != null && clearText.gameObject.activeSelf)
-        {
-            clearAge += dt;
-            float s = EaseOutBack(Mathf.Clamp01(clearAge / 0.45f)) * (1f + 0.06f * Mathf.Sin(Time.time * 9f));
-            clearText.rectTransform.localScale = Vector3.one * s;
-            clearText.color = Color.HSVToRGB(Mathf.Repeat(Time.time * 1.2f, 1f), 0.7f, 1f);
-        }
-        if (bannerText != null)
-        {
-            bannerText.gameObject.SetActive(cleared);
-            if (cleared)
-            {
-                bool on = Mathf.Repeat(Time.time * 6f, 1f) < 0.6f;       // 電光掲示板のチカチカ
-                bannerText.color = on ? Gold : new Color(1f, 0.2f, 0.2f);
-                bannerText.rectTransform.localScale = Vector3.one * (EaseOutBack(Mathf.Clamp01(clearAge / 0.5f)));
-            }
-        }
-    }
-
-    void UpdateReels(float dt)
-    {
-        if (reels == null || gm == null) return;
-        bool timeUp = gm.IsTimeUp && !gm.IsCleared;
-        for (int k = 0; k < reels.Length && k < 3; k++)
-        {
-            var t = reels[k];
-            if (t == null) continue;
-            bool locked = gm.CollectedCount >= ReelLockAt(k);
-            if (locked && !reelWasLocked[k]) reelPunch[k] = 0.6f;     // 止まった瞬間にドンッ
-            reelWasLocked[k] = locked;
-            reelPunch[k] = Mathf.Lerp(reelPunch[k], 0f, 12f * dt);
-            t.rectTransform.parent.localScale = Vector3.one * (1f + reelPunch[k]);
-
-            if (timeUp) { t.text = "X"; t.color = new Color(0.6f, 0.1f, 0.1f); }
-            else if (locked)
-            {
-                t.text = "7";
-                bool jackpot = gm.IsCleared && Mathf.Repeat(Time.time * 8f, 1f) < 0.5f;
-                t.color = jackpot ? new Color(1f, 0.1f, 0.1f) : new Color(0.85f, 0.05f, 0.05f);
-            }
-            else
-            {
-                int d = ((int)(Time.time * 28f) + k * 4) % 9 + 1;       // 回転中は数字がブレる
-                t.text = d == 7 ? "8" : d.ToString();
-                t.color = new Color(0.25f, 0.25f, 0.3f);
-            }
-        }
+        if (clearText == null || !clearText.gameObject.activeSelf) return;
+        clearAge += dt;
+        float s = EaseOutBack(Mathf.Clamp01(clearAge / 0.45f)) * (1f + 0.06f * Mathf.Sin(Time.time * 9f));
+        clearText.rectTransform.localScale = Vector3.one * s;
+        clearText.color = Color.HSVToRGB(Mathf.Repeat(Time.time * 1.2f, 1f), 0.7f, 1f);
     }
 
     void UpdateBackdrop()
@@ -237,7 +190,7 @@ public class Juice : MonoBehaviour
         backdrop.rotation = cam.transform.rotation * Quaternion.Euler(0f, 0f, Time.time * 9f);
         if (backdropMat != null)
         {
-            // ゆっくり色が回る。クリアで金色に連続点滅、時間切れで赤。
+            // ゆっくり色が回る。クリアで金/ピンク点滅、時間切れで赤。
             Color c = Color.HSVToRGB(Mathf.Repeat(Time.time * 0.07f, 1f), 0.85f, 0.85f);
             if (gm != null && gm.IsCleared) c = Mathf.Repeat(Time.time * 10f, 1f) < 0.5f ? Gold : new Color(1f, 0.3f, 0.6f);
             else if (redT > 0f) c = new Color(0.9f, 0.05f, 0.05f);
@@ -258,7 +211,7 @@ public class Juice : MonoBehaviour
             if (cleared) m = (int)(Time.time * 10f) % 2 == 0 ? bulbOn : bulbOff;           // 全点滅
             else if (timeUp) m = (int)(Time.time * 3f) % 2 == 0 ? bulbRed : bulbOff;       // 赤くゆっくり
             else m = (i + step) % 4 == 0 ? bulbOn : bulbOff;                               // 電飾が走る
-            if (bulbMats[i] != m) { bulbMats[i] = m; bulbs[i].sharedMaterial = m; }   // 変化した時だけ代入
+            if (bulbMats[i] != m) { bulbMats[i] = m; bulbs[i].sharedMaterial = m; }       // 変化した時だけ代入
         }
     }
 
@@ -388,7 +341,7 @@ public class Juice : MonoBehaviour
         trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
-    static Gradient GoldGradient()
+    public static Gradient GoldGradient()
     {
         var g = new Gradient();
         g.SetKeys(
