@@ -23,7 +23,7 @@ public class PachinkoBall : MonoBehaviour
     void Update()
     {
         age += Time.deltaTime;
-        if (age > PachinkoBoard.MaxBallLife || transform.position.y < -3f) { board.RemoveBall(this); return; }
+        if (age > PachinkoBoard.MaxBallLife || transform.position.y < -3f) { board.BallLost(this); return; }
 
         // ピンの間に挟まって止まったら、ちょんと揺らして落とす(実機の台でいう「釘調整」の代わり)
         if (col != null && col.enabled && !body.isKinematic && body.linearVelocity.sqrMagnitude < 0.01f)
@@ -42,7 +42,7 @@ public class PachinkoBall : MonoBehaviour
     {
         var zone = other.GetComponent<PachinkoZone>();
         if (zone == null) return;
-        if (zone.isOut) board.RemoveBall(this);
+        if (zone.isOut) board.BallLost(this);
         else if (!scored) { scored = true; board.OnHole(zone.holeIndex, transform.position); }
     }
 }
@@ -55,14 +55,22 @@ public class PachinkoBoard : MonoBehaviour
     public const int Layer = 8;                   // 盤専用。プレイヤー等(Default)とは衝突しない
     public const float Z = 11.5f;                 // 盤の奥行き位置(ステージ奥端のさらに後ろ)
     public const float MaxBallLife = 40f;
-    public static readonly float[] HoleX = { -3.6f, 0f, 3.6f };
+    public static readonly float[] HoleX = { -5.5f, 0f, 5.5f };
+    // 中央が「得点の穴」(アイテム獲得)、左右が「ボーナスの穴」(メダルが大量に出現)
+    public static readonly BallResult[] HoleResult = { BallResult.Bonus, BallResult.Score, BallResult.Bonus };
+    public static readonly float[] HoleRadius = { 0.5f, 1.0f, 0.5f };
     const float HoleY = 1.35f;
 
     public GameManager gm;
-    public Material pinMat, ballMat, bladeMat, panelMat, trailMat, lampOn, lampOff, lampRed;
+    public Material pinMat, ballMat, bladeMat, panelMat, trailMat, lampOn, lampOff, lampRed, scoreIdle, bonusIdle;
 
     public event System.Action<int> HoleEntered;
     public int HoleHits { get; private set; }
+    public int ScoreBalls { get; private set; }    // 集計(調整・テスト用)
+    public int BonusBalls { get; private set; }
+    public int MissBalls { get; private set; }
+    public int LaunchedBalls { get; private set; }   // 発射した数
+    public int ClearedBalls { get; private set; }    // リセットで消した数
     public int ActiveBallCount => balls.Count;
 
     readonly List<PachinkoBall> balls = new List<PachinkoBall>();
@@ -73,7 +81,7 @@ public class PachinkoBoard : MonoBehaviour
     readonly float[] holeLampT = new float[3];
     readonly List<Renderer> frameBulbs = new List<Renderer>();
     readonly List<Material> frameMats = new List<Material>();
-    PhysicsMaterial bouncy;
+    PhysicsMaterial bouncy, rampMat;
     ParticleSystem sparks;
     float launchPulseT;
 
@@ -83,11 +91,17 @@ public class PachinkoBoard : MonoBehaviour
         bouncy = new PhysicsMaterial("PachinkoBouncy")
         {
             bounciness = 0.45f, dynamicFriction = 0.08f, staticFriction = 0.08f,
-            bounceCombine = PhysicsMaterialCombine.Maximum, frictionCombine = PhysicsMaterialCombine.Minimum
+            bounceCombine = PhysicsMaterialCombine.Average, frictionCombine = PhysicsMaterialCombine.Minimum
+        };
+        rampMat = new PhysicsMaterial("PachinkoRamp")
+        {
+            bounciness = 0.1f, dynamicFriction = 0.05f, staticFriction = 0.05f,
+            bounceCombine = PhysicsMaterialCombine.Average, frictionCombine = PhysicsMaterialCombine.Minimum
         };
         BuildPanel();
         BuildPins();
         BuildWindmills();
+        BuildRamps();
         BuildHoles();
         BuildWalls();
         BuildFrame();
@@ -114,11 +128,14 @@ public class PachinkoBoard : MonoBehaviour
     public void ClearBalls()
     {
         StopAllCoroutines();
+        ClearedBalls += balls.Count;
         foreach (var b in balls) if (b != null) Destroy(b.gameObject);
         balls.Clear();
         for (int i = 0; i < holeLampT.Length; i++) holeLampT[i] = 0f;
         launchPulseT = 0f;
     }
+
+    public void ResetStats() { HoleHits = ScoreBalls = BonusBalls = MissBalls = LaunchedBalls = ClearedBalls = 0; }
 
     public void RemoveBall(PachinkoBall b)
     {
@@ -126,9 +143,23 @@ public class PachinkoBoard : MonoBehaviour
         Destroy(b.gameObject);
     }
 
+    // アウト口に落ちた(または止まって寿命が来た)玉。どの穴にも入っていなければ「はずれ」を報告する。
+    public void BallLost(PachinkoBall b)
+    {
+        if (b == null || !balls.Contains(b)) return;
+        if (!b.scored)
+        {
+            MissBalls++;
+            if (gm != null) gm.ReportBall(BallResult.Miss);
+        }
+        RemoveBall(b);
+    }
+
     public void OnHole(int index, Vector3 pos)
     {
         HoleHits++;
+        var result = HoleResult[index];
+        if (result == BallResult.Score) ScoreBalls++; else BonusBalls++;
         holeLampT[index] = 0.9f;
         for (int i = 0; i < 24; i++)
         {
@@ -141,12 +172,14 @@ public class PachinkoBoard : MonoBehaviour
             sparks.Emit(ep, 1);
         }
         HoleEntered?.Invoke(index);
+        if (gm != null) gm.ReportBall(result);
     }
 
     // コインの位置から玉を発射する(放物線で盤の上部へ飛び、そこから物理で落下)
     public PachinkoBall LaunchBall(Vector3 from)
     {
         var ball = CreateBall(from);
+        LaunchedBalls++;
         StartCoroutine(Fly(ball, from));
         return ball;
     }
@@ -234,7 +267,10 @@ public class PachinkoBoard : MonoBehaviour
         for (int i = 0; i < holeLamps.Count; i++)
         {
             holeLampT[i] = Mathf.Max(0f, holeLampT[i] - Time.deltaTime);
-            var m = holeLampT[i] > 0f ? (((int)(Time.time * 14f) % 2 == 0) ? lampOn : lampRed) : lampOff;
+            bool isScore = HoleResult[i] == BallResult.Score;
+            var idle = isScore ? scoreIdle : bonusIdle;
+            var flash = isScore ? lampOn : lampRed;
+            var m = holeLampT[i] > 0f ? (((int)(Time.time * 14f) % 2 == 0) ? flash : idle) : idle;
             if (m != null && holeLamps[i].sharedMaterial != m) holeLamps[i].sharedMaterial = m;
         }
         UpdateFrameLights();
@@ -282,7 +318,7 @@ public class PachinkoBoard : MonoBehaviour
 
     void BuildPins()
     {
-        var windCenters = new[] { new Vector2(-3.4f, 4.2f), new Vector2(3.4f, 5.4f) };
+        var windCenters = new[] { new Vector2(-3.4f, 5.1f), new Vector2(3.4f, 6.1f) };
         int row = 0;
         for (float y = 2.2f; y < 6.8f; y += 0.72f, row++)
         {
@@ -293,23 +329,41 @@ public class PachinkoBoard : MonoBehaviour
                 if (nearWind) continue;
                 // 穴の真上は漏斗状に空けておく(ここにくぎがあると玉が案内くぎとの間に挟まって止まる)
                 bool nearHole = false;
-                foreach (var hx in HoleX) if (y < 3.0f && Mathf.Abs(x - hx) < 1.6f) nearHole = true;
+                for (int h = 0; h < HoleX.Length; h++)
+                {
+                    bool score = HoleResult[h] == BallResult.Score;
+                    // 得点の穴の上は広い漏斗(案内板)の領域。ボーナスの穴の上も少し空ける。
+                    if (score ? (y < 3.6f && Mathf.Abs(x - HoleX[h]) < 3.5f) : (y < 3.0f && Mathf.Abs(x - HoleX[h]) < 1.4f)) nearHole = true;
+                }
                 if (nearHole) continue;
                 Prim(PrimitiveType.Sphere, "Pin", new Vector3(x, y, Z), Vector3.one * 0.26f, pinMat, true);
             }
         }
         // 穴の両脇のくぎ(玉を穴へ導く)
-        foreach (var hx in HoleX)
+        for (int h = 0; h < HoleX.Length; h++)
         {
+            if (HoleResult[h] == BallResult.Score) continue;
+            float hx = HoleX[h];
             Prim(PrimitiveType.Sphere, "GuidePin", new Vector3(hx - 0.7f, 1.9f, Z), Vector3.one * 0.28f, pinMat, true);
             Prim(PrimitiveType.Sphere, "GuidePin", new Vector3(hx + 0.7f, 1.9f, Z), Vector3.one * 0.28f, pinMat, true);
         }
     }
 
+    // 得点の穴へ玉を導く斜めの案内板(左右から中央へ傾く)
+    void BuildRamps()
+    {
+        foreach (var side in new[] { -1f, 1f })
+        {
+            var r = Prim(PrimitiveType.Cube, "Ramp", new Vector3(side * 2.1f, 2.65f, Z), new Vector3(2.4f, 0.15f, 0.5f), bladeMat != null ? bladeMat : pinMat, true);
+            r.transform.rotation = Quaternion.Euler(0f, 0f, side * 22f);   // 左は右下がり、右は左下がり(中央へ向かって下る)
+            r.GetComponent<Collider>().sharedMaterial = rampMat;   // 弾まず、すべって中央へ
+        }
+    }
+
     void BuildWindmills()
     {
-        AddWindmill(new Vector3(-3.4f, 4.2f, Z), 90f);
-        AddWindmill(new Vector3(3.4f, 5.4f, Z), -120f);
+        AddWindmill(new Vector3(-3.4f, 5.1f, Z), 90f);
+        AddWindmill(new Vector3(3.4f, 6.1f, Z), -120f);
     }
 
     void AddWindmill(Vector3 pos, float degPerSec)
@@ -332,13 +386,17 @@ public class PachinkoBoard : MonoBehaviour
     {
         for (int i = 0; i < HoleX.Length; i++)
         {
-            var lamp = Prim(PrimitiveType.Sphere, "HoleLamp", new Vector3(HoleX[i], HoleY, Z + 0.15f), new Vector3(1.0f, 1.0f, 0.15f), lampOff, false);
+            float d = HoleRadius[i] * 2f + 0.25f;
+            var idleMat = HoleResult[i] == BallResult.Score ? scoreIdle : bonusIdle;
+            var lamp = Prim(PrimitiveType.Sphere, "HoleLamp", new Vector3(HoleX[i], HoleY, Z + 0.15f), new Vector3(d, d, 0.15f), idleMat != null ? idleMat : lampOff, false);
             holeLamps.Add(lamp.GetComponent<Renderer>());
+            MakeLabel(HoleResult[i] == BallResult.Score ? "GET!" : "MEDAL!", new Vector3(HoleX[i], HoleY - 0.95f, Z - 0.25f),
+                      HoleResult[i] == BallResult.Score ? new Color(1f, 0.85f, 0.2f) : new Color(1f, 0.4f, 0.8f));
             var z = new GameObject("Hole" + i);
             z.layer = Layer;
             z.transform.SetParent(transform, true);
             z.transform.position = new Vector3(HoleX[i], HoleY, Z);
-            var sc = z.AddComponent<SphereCollider>(); sc.isTrigger = true; sc.radius = 0.55f;
+            var sc = z.AddComponent<SphereCollider>(); sc.isTrigger = true; sc.radius = HoleRadius[i];
             var zone = z.AddComponent<PachinkoZone>(); zone.holeIndex = i;
         }
         // アウト口(盤の底。ここに触れた玉は消える)
@@ -384,6 +442,22 @@ public class PachinkoBoard : MonoBehaviour
             frameBulbs.Add(b.GetComponent<Renderer>());
             frameMats.Add(lampOff);
         }
+    }
+
+    // 穴の下に付ける文字(3D文字)。種類が一目で分かるようにする
+    void MakeLabel(string text, Vector3 pos, Color color)
+    {
+        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) return;
+        var go = new GameObject("Label_" + text);
+        go.layer = Layer;
+        go.transform.SetParent(transform, true);
+        go.transform.position = pos;
+        var tm = go.AddComponent<TextMesh>();
+        tm.text = text; tm.font = font; tm.fontSize = 64; tm.characterSize = 0.07f;
+        tm.anchor = TextAnchor.MiddleCenter; tm.alignment = TextAlignment.Center;
+        tm.color = color; tm.fontStyle = FontStyle.Bold;
+        go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
     }
 
     void MakeSparks()

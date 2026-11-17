@@ -53,6 +53,9 @@ public class Juice : MonoBehaviour
         if (gm != null)
         {
             gm.ItemCollected += OnCollected;
+            gm.ScoreAwarded += OnScore;
+            gm.BonusTriggered += OnBonus;
+            gm.MissTriggered += OnMiss;
             gm.GameCleared += OnCleared;
             gm.TimeUpReached += OnTimeUp;
             gm.GameReset += OnReset;
@@ -65,6 +68,9 @@ public class Juice : MonoBehaviour
         if (gm != null)
         {
             gm.ItemCollected -= OnCollected;
+            gm.ScoreAwarded -= OnScore;
+            gm.BonusTriggered -= OnBonus;
+            gm.MissTriggered -= OnMiss;
             gm.GameCleared -= OnCleared;
             gm.TimeUpReached -= OnTimeUp;
             gm.GameReset -= OnReset;
@@ -73,13 +79,42 @@ public class Juice : MonoBehaviour
     }
 
     // ---------- イベント ----------
+    // メダルを拾った(玉が発射される)
     void OnCollected(Collectible item)
     {
-        Emit(burst, item.transform.position, 30, 6f, Gold);
-        countPunch = 0.7f;
-        Flash(Gold, 0.35f);
-        Shake(0.12f, 0.2f);
+        Emit(burst, item.transform.position, 24, 5f, Gold);
+        Shake(0.06f, 0.12f);
     }
+
+    // 得点の穴に入った(アイテム獲得): 一番派手に祝う
+    void OnScore()
+    {
+        countPunch = 0.8f;
+        Flash(Gold, 0.45f);
+        Shake(0.2f, 0.3f);
+        Vector3 p = player != null ? player.transform.position : Vector3.zero;
+        Emit(confetti, p + Vector3.up * 1.2f, 40, 8f, Color.white, true);
+    }
+
+    // ボーナスの穴: メダルの雨
+    void OnBonus()
+    {
+        Flash(new Color(1f, 0.4f, 0.8f), 0.35f);
+        Shake(0.15f, 0.25f);
+        for (int i = 0; i < 90; i++)
+        {
+            var ep = new ParticleSystem.EmitParams();
+            ep.position = new Vector3(Random.Range(-8f, 8f), Random.Range(6f, 14f), Random.Range(-8f, 8f));
+            ep.velocity = new Vector3(0f, -Random.Range(1f, 4f), 0f);
+            ep.startColor = Color.Lerp(Gold, Color.white, Random.Range(0f, 0.4f));
+            ep.startSize = Random.Range(0.3f, 0.5f);
+            ep.startLifetime = Random.Range(1.5f, 2.4f);
+            coinRain.Emit(ep, 1);
+        }
+    }
+
+    // どの穴にも入らなかった: 控えめ
+    void OnMiss() => Flash(new Color(0.5f, 0.6f, 1f), 0.12f);
 
     void OnCleared()
     {
