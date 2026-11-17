@@ -30,6 +30,10 @@ public class GameLogicTests
         clearText.transform.SetParent(root.transform);
         gm.countText = countText;
         gm.clearText = clearText;
+        gm.timeText = new GameObject("Time").AddComponent<Text>();
+        gm.timeUpText = new GameObject("TimeUp").AddComponent<Text>();
+        gm.timeText.transform.SetParent(root.transform);
+        gm.timeUpText.transform.SetParent(root.transform);
 
         for (int i = 0; i < 5; i++)
         {
@@ -86,6 +90,78 @@ public class GameLogicTests
         Assert.AreEqual("0/5", countText.text);
         Assert.IsTrue(gm.items.TrueForAll(i => i.gameObject.activeSelf && !i.Collected));
         Assert.AreEqual(pc.startPosition, pc.transform.position);
+    }
+
+    // ---- 30秒制限 (A1〜A5) ----
+
+    [Test]
+    public void A1_InitialTimeIs30_AndDecreasesWithTick()
+    {
+        Assert.AreEqual(30f, gm.RemainingTime, 0.001f);
+        gm.Tick(10f);
+        Assert.AreEqual(20f, gm.RemainingTime, 0.001f);
+    }
+
+    [Test]
+    public void A2_TimeUpAtZero_StopsPlaying_ShowsTimeUp()
+    {
+        gm.Tick(29f);
+        Assert.IsFalse(gm.IsTimeUp);
+        gm.Tick(1.5f);
+        Assert.IsTrue(gm.IsTimeUp);
+        Assert.AreEqual(0f, gm.RemainingTime);
+        Assert.IsTrue(gm.timeUpText.gameObject.activeSelf);
+        Assert.IsFalse(gm.IsPlaying);
+    }
+
+    [Test]
+    public void A2_CollectAfterTimeUp_IsIgnored()
+    {
+        gm.Tick(31f);
+        gm.Collect(gm.items[0]);
+        Assert.AreEqual(0, gm.CollectedCount);
+        Assert.IsFalse(gm.items[0].Collected);
+    }
+
+    [Test]
+    public void A3_ClearStopsClock()
+    {
+        gm.Tick(5f);
+        for (int i = 0; i < 5; i++) gm.Collect(gm.items[i]);
+        float t = gm.RemainingTime;
+        gm.Tick(3f);
+        Assert.AreEqual(t, gm.RemainingTime, 0.0001f);
+    }
+
+    [Test]
+    public void A4_AfterClear_NeverBecomesTimeUp()
+    {
+        for (int i = 0; i < 5; i++) gm.Collect(gm.items[i]);
+        gm.Tick(100f);
+        Assert.IsTrue(gm.IsCleared);
+        Assert.IsFalse(gm.IsTimeUp);
+        Assert.IsFalse(gm.timeUpText.gameObject.activeSelf);
+    }
+
+    [Test]
+    public void A5_ResetRestoresTimeTo30_AndClearsTimeUp()
+    {
+        gm.Tick(31f);
+        gm.ResetGame();
+        Assert.AreEqual(30f, gm.RemainingTime, 0.001f);
+        Assert.IsFalse(gm.IsTimeUp);
+        Assert.IsFalse(gm.timeUpText.gameObject.activeSelf);
+        Assert.AreEqual("TIME 30", gm.timeText.text);
+    }
+
+    [Test]
+    public void Priority_FifthCollectBeforeTimeUp_Clears()
+    {
+        gm.Tick(29.99f);
+        for (int i = 0; i < 5; i++) gm.Collect(gm.items[i]);   // 物理判定はUpdateより先
+        gm.Tick(1f);
+        Assert.IsTrue(gm.IsCleared);
+        Assert.IsFalse(gm.IsTimeUp);
     }
 
     [Test]

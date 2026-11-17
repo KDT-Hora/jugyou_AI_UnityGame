@@ -119,6 +119,35 @@ public class GameplayTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator TimeUp_StopsMovement_ButRStillWorks()
+    {
+        yield return null;
+        gm.timeLimit = 1f;
+        gm.ResetGame();
+        yield return new WaitForSeconds(1.4f);       // 操作せず時間切れ
+        Assert.IsTrue(gm.IsTimeUp);
+        float z = pc.transform.position.z;
+        yield return Hold(Key.W, 0.5f);              // 時間切れ後は動けない
+        Assert.AreEqual(z, pc.transform.position.z, 0.05f);
+        yield return Hold(Key.R, 0.2f);
+        yield return null;
+        Assert.IsFalse(gm.IsTimeUp);
+        Assert.AreEqual(1f, gm.RemainingTime, 0.3f);
+        float z1 = pc.transform.position.z;
+        yield return Hold(Key.W, 0.3f);              // 再開後は動ける
+        Assert.Greater(pc.transform.position.z, z1 + 0.5f);
+    }
+
+    [UnityTest]
+    public IEnumerator TimerCountsDown_InRealTime()
+    {
+        yield return null;
+        gm.ResetGame();
+        yield return new WaitForSeconds(1.0f);
+        Assert.That(gm.RemainingTime, Is.InRange(28.5f, 29.3f));
+    }
+
+    [UnityTest]
     public IEnumerator FallingOffTheFloor_ResetsGame()
     {
         yield return null;

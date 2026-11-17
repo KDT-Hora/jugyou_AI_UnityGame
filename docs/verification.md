@@ -20,6 +20,23 @@ Editor 6000.6.4f1 / Play モード中に `unity command runtime simulate_key` �
 - PlayMode(`Assets/Tests/PlayMode/GameplayTests.cs`、仮想キーボード): W=+Z、A=-X・D=+X、S=-Z、W長押しで5個回収しクリア、R途中リセット、床から落下でリセット
 - 初回のEditMode実行は5件全失敗: `PlayerController` が `Awake` で取得する Rigidbody が EditMode では未初期化(NullReference)。遅延取得に修正して合格。
 
+## 30秒制限(A1〜A5)の検証
+
+自動テスト: EditMode 12/12、PlayMode 8/8 合格(時間関連は EditMode 7件+PlayMode 2件を追加)。
+実時間30秒での実機確認(短縮なし、`unity command` で入力と状態取得):
+
+| 条件 | 操作 | 期待 | 実際 | 根拠 | 判定 |
+|---|---|---|---|---|---|
+| A1 | 開始後5秒待つ | 表示が減る | 27.0→21.9秒、`TIME 22` | 状態取得 + `evidence/a1_timer.png` | 確認済み |
+| A2 | 操作せず約33秒 | TIME UP、移動停止 | remain=0、TIME UP表示。W1秒押しても座標不変 | `evidence/a2_timeup.png` | 確認済み |
+| A3 | 約3.7秒で全回収 | CLEARで時計停止 | 26.27で3秒後も26.27 | 状態取得 | 確認済み |
+| A4 | CLEAR後30秒待つ | TIME UPにならない | timeUp=False、CLEAR表示のまま | 状態取得 | 確認済み |
+| A5 | 時間切れ後R / CLEAR後R | 30秒に戻る | 約28.7(0.8秒後に取得)、UIも初期化 | 状態取得 | 確認済み |
+| 優先順位 | 残り29.99秒で5個回収→Tick | CLEAR優先 | CLEAR | EditModeテスト | 確認済み(実機で同時成立は未再現) |
+| 落下でも30秒へ | 落下 | 30秒に戻る | `ResetGame` を共用(旧テストで落下リセットは確認済み) | コード+既存テスト | 実機の時計値は未確認 |
+
+注意: 実機確認はEditorが非フォーカスでも進む設定で行った。TIME UP文字がアイテムと重なる(見た目の軽微な課題)。クリア後の入力停止(前回の問題1)は今回未対応。
+
 ## 動画
 
 `evidence/playthrough.mp4`(約24秒、Editor画面)。D→A→S→W(回収)→R→全回収でCLEAR→クリア後R→回収後に右端から落下→リセット。

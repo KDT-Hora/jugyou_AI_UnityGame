@@ -38,7 +38,9 @@ public class PlayerController : MonoBehaviour
 
     void FixedUpdate()
     {
-        var v = new Vector3(move.x, 0f, move.y).normalized * moveSpeed;
+        // 時間切れ後は移動できない(Rと落下判定はUpdateで生きている)
+        bool canMove = manager == null || !manager.IsTimeUp;
+        var v = canMove ? new Vector3(move.x, 0f, move.y).normalized * moveSpeed : Vector3.zero;
         Body.linearVelocity = new Vector3(v.x, Body.linearVelocity.y, v.z);
     }
 
