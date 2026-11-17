@@ -181,11 +181,17 @@ public class GameplayTests : InputTestFixture
         var j = new GameObject("Juice").AddComponent<Juice>();
         j.transform.SetParent(root.transform);
         j.gm = gm; j.player = pc; j.cam = cam; j.countText = gm.countText;
+        j.rollDigitOverride = 9;     // 回転中は常に「9/5」。固まるバグがあれば最終値が"9/5"になり確実に落ちる
         j.gameObject.SetActive(false); j.gameObject.SetActive(true);   // OnEnableでイベント購読
         yield return null;
-        yield return Hold(Key.W, 2.8f);
+        Press(kb[Key.W]);
+        float t0 = Time.time;
+        while (!gm.IsCleared && Time.time - t0 < 6f) yield return null;   // クリアした瞬間を捉える
         Assert.IsTrue(gm.IsCleared);
-        yield return new WaitForSeconds(1.0f);                         // 回転(0.45秒)が終わるまで待つ
+        yield return null;                                                // LateUpdateで回転表示が書かれる
+        Assert.AreEqual("9/5", gm.countText.text, "回転中は上書き表示になっている(前提の確認)");
+        Release(kb[Key.W]);
+        yield return new WaitForSeconds(1.0f);                            // 回転(0.45秒)が終わるまで待つ
         Assert.AreEqual("5/5", gm.countText.text);
     }
 

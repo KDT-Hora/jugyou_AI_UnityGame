@@ -15,6 +15,7 @@ public class Juice : MonoBehaviour
     public Transform backdrop;              // 回転する放射状の背景
     public Material backdropMat;
     public Material bulbOn, bulbOff, bulbRed;
+    [HideInInspector] public int rollDigitOverride = -1;   // テスト用: 回転中の数字を固定(-1で通常のランダム)
 
     // 何個目でリールが止まるか(アイテム数から導出: 5個なら 1,3,5。最後は必ず全個数)
     int ReelLockAt(int k) => gm.items.Count <= 1 ? 1 : 1 + Mathf.RoundToInt(k * (gm.items.Count - 1) / 2f);
@@ -149,7 +150,7 @@ public class Juice : MonoBehaviour
             rollT -= Time.deltaTime;
             // 回転が終わったら必ず正しい値を書き戻す(クリア/時間切れ後はGameManagerが再描画しないため)
             countText.text = rollT > 0f
-                ? $"{(int)(Time.time * 30f) % 10}/{gm.items.Count}"
+                ? $"{(rollDigitOverride >= 0 ? rollDigitOverride : (int)(Time.time * 30f) % 10)}/{gm.items.Count}"
                 : $"{gm.CollectedCount}/{gm.items.Count}";
         }
         if (shakeT > 0f)
