@@ -64,17 +64,30 @@ public class GameManager : MonoBehaviour
         IsCleared = false;
         IsTimeUp = false;
         RemainingTime = timeLimit;           // A5
+        shownCount = -1; shownSec = -1;      // リセット時は必ず再描画
         foreach (var i in items) i.ResetItem();
         if (player != null) player.ResetPlayer();
         UpdateUI();
         GameReset?.Invoke();
     }
 
+    int shownCount = -1, shownSec = -1;
+
     void UpdateUI()
     {
-        if (countText != null) countText.text = $"{CollectedCount}/{items.Count}";
+        // 毎フレーム呼ばれるため、値が変わった時だけ文字列を作る(GC削減)
+        if (countText != null && shownCount != CollectedCount)
+        {
+            shownCount = CollectedCount;
+            countText.text = $"{CollectedCount}/{items.Count}";
+        }
         if (clearText != null) clearText.gameObject.SetActive(IsCleared);
-        if (timeText != null) timeText.text = $"TIME {Mathf.CeilToInt(RemainingTime)}";
+        int sec = Mathf.CeilToInt(RemainingTime);
+        if (timeText != null && shownSec != sec)
+        {
+            shownSec = sec;
+            timeText.text = $"TIME {sec}";
+        }
         if (timeUpText != null) timeUpText.gameObject.SetActive(IsTimeUp && !IsCleared);
     }
 }

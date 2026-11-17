@@ -57,7 +57,7 @@ public class GameplayTests : InputTestFixture
 
     public override void TearDown()
     {
-        Object.Destroy(root);
+        Object.DestroyImmediate(root);   // 次のテストのSetupと重ならないよう即時破棄
         base.TearDown();
     }
 
@@ -129,10 +129,11 @@ public class GameplayTests : InputTestFixture
         float z = pc.transform.position.z;
         yield return Hold(Key.W, 0.5f);              // 時間切れ後は動けない
         Assert.AreEqual(z, pc.transform.position.z, 0.05f);
+        gm.timeLimit = 30f;                          // 再開後の移動確認はタイムアップに左右されないよう長くする
         yield return Hold(Key.R, 0.2f);
         yield return null;
         Assert.IsFalse(gm.IsTimeUp);
-        Assert.AreEqual(1f, gm.RemainingTime, 0.3f);
+        Assert.Greater(gm.RemainingTime, 20f);
         float z1 = pc.transform.position.z;
         yield return Hold(Key.W, 0.3f);              // 再開後は動ける
         Assert.Greater(pc.transform.position.z, z1 + 0.5f);
@@ -156,6 +157,36 @@ public class GameplayTests : InputTestFixture
         yield return null;
         Assert.IsFalse(gm.IsCleared);
         Assert.AreEqual(0, gm.CollectedCount);
+    }
+
+    [UnityTest]
+    public IEnumerator Clear_StopsTheClock_InRealTime()
+    {
+        yield return null;
+        yield return Hold(Key.W, 2.8f);
+        Assert.IsTrue(gm.IsCleared);
+        float t = gm.RemainingTime;
+        yield return new WaitForSeconds(0.6f);
+        Assert.AreEqual(t, gm.RemainingTime, 0.001f);
+        Assert.IsFalse(gm.IsTimeUp);
+    }
+
+    // レビュー指摘: 回収数の回転演出がクリア後に誤った数字で固まらないこと
+    [UnityTest]
+    public IEnumerator Juice_CountText_SettlesToRealValue_AfterClear()
+    {
+        var camGo = new GameObject("Cam"); camGo.transform.SetParent(root.transform);
+        var cam = camGo.AddComponent<Camera>();
+        gm.countText.text = "";
+        var j = new GameObject("Juice").AddComponent<Juice>();
+        j.transform.SetParent(root.transform);
+        j.gm = gm; j.player = pc; j.cam = cam; j.countText = gm.countText;
+        j.gameObject.SetActive(false); j.gameObject.SetActive(true);   // OnEnableでイベント購読
+        yield return null;
+        yield return Hold(Key.W, 2.8f);
+        Assert.IsTrue(gm.IsCleared);
+        yield return new WaitForSeconds(1.0f);                         // 回転(0.45秒)が終わるまで待つ
+        Assert.AreEqual("5/5", gm.countText.text);
     }
 
     [UnityTest]

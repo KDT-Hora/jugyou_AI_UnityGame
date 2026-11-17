@@ -16,12 +16,14 @@ public class Juice : MonoBehaviour
     public Material backdropMat;
     public Material bulbOn, bulbOff, bulbRed;
 
-    static readonly int[] ReelLockAt = { 1, 3, 5 };   // 何個目でリールが止まるか
+    // 何個目でリールが止まるか(アイテム数から導出: 5個なら 1,3,5。最後は必ず全個数)
+    int ReelLockAt(int k) => gm.items.Count <= 1 ? 1 : 1 + Mathf.RoundToInt(k * (gm.items.Count - 1) / 2f);
     static readonly Color Gold = new Color(1f, 0.78f, 0.15f);
 
     ParticleSystem burst, confetti, coinRain;
     TrailRenderer trail;
     readonly List<Renderer> bulbs = new List<Renderer>();
+    readonly List<Material> bulbMats = new List<Material>();
     Vector3 camBase;
     float fovBase;
     Vector2 timeUpBase;
@@ -109,9 +111,13 @@ public class Juice : MonoBehaviour
     void OnReset()
     {
         if (trail != null) trail.Clear();
+        // 前のラウンドの演出を持ち越さない
+        burst.Clear(); confetti.Clear(); coinRain.Clear();
         clearAge = 0f; strobeT = 0f; redT = 0f; rollT = 0f;
+        flashAlpha = 0f; shakeT = 0f; countPunch = 0f; secPunch = 0f;
         lastSec = -1;
-        for (int k = 0; k < 3; k++) reelWasLocked[k] = false;
+        for (int k = 0; k < 3; k++) { reelWasLocked[k] = false; reelPunch[k] = 0f; }
+        if (flash != null) { var c = flash.color; c.a = 0f; flash.color = c; }
     }
 
     void Flash(Color c, float a) { flashColor = c; flashAlpha = Mathf.Max(flashAlpha, a); }
@@ -141,7 +147,10 @@ public class Juice : MonoBehaviour
         if (countText != null && rollT > 0f && gm != null)
         {
             rollT -= Time.deltaTime;
-            countText.text = $"{(int)(Time.time * 30f) % 10}/{gm.items.Count}";
+            // 回転が終わったら必ず正しい値を書き戻す(クリア/時間切れ後はGameManagerが再描画しないため)
+            countText.text = rollT > 0f
+                ? $"{(int)(Time.time * 30f) % 10}/{gm.items.Count}"
+                : $"{gm.CollectedCount}/{gm.items.Count}";
         }
         if (shakeT > 0f)
         {
@@ -197,7 +206,7 @@ public class Juice : MonoBehaviour
         {
             var t = reels[k];
             if (t == null) continue;
-            bool locked = gm.CollectedCount >= ReelLockAt[k];
+            bool locked = gm.CollectedCount >= ReelLockAt(k);
             if (locked && !reelWasLocked[k]) reelPunch[k] = 0.6f;     // 止まった瞬間にドンッ
             reelWasLocked[k] = locked;
             reelPunch[k] = Mathf.Lerp(reelPunch[k], 0f, 12f * dt);
@@ -248,7 +257,7 @@ public class Juice : MonoBehaviour
             if (cleared) m = (int)(Time.time * 10f) % 2 == 0 ? bulbOn : bulbOff;           // 全点滅
             else if (timeUp) m = (int)(Time.time * 3f) % 2 == 0 ? bulbRed : bulbOff;       // 赤くゆっくり
             else m = (i + step) % 4 == 0 ? bulbOn : bulbOff;                               // 電飾が走る
-            bulbs[i].sharedMaterial = m;
+            if (bulbMats[i] != m) { bulbMats[i] = m; bulbs[i].sharedMaterial = m; }   // 変化した時だけ代入
         }
     }
 
@@ -300,6 +309,7 @@ public class Juice : MonoBehaviour
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.sharedMaterial = bulbOff;
             bulbs.Add(r);
+            bulbMats.Add(bulbOff);
         }
     }
 

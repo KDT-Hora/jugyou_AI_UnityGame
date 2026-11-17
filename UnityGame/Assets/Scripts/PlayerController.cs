@@ -17,6 +17,9 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // 落下判定はキーボードの有無に関係なく行う
+        if (transform.position.y < fallY && manager != null) { manager.ResetGame(); return; }
+
         var kb = Keyboard.current;
         if (kb == null) { move = Vector2.zero; return; }
 
@@ -32,8 +35,7 @@ public class PlayerController : MonoBehaviour
         bool rDown = (rNow && !rPrev) || kb.rKey.wasPressedThisFrame;
         rPrev = rNow;
 
-        if (rDown) manager.ResetGame();
-        else if (transform.position.y < fallY) manager.ResetGame();
+        if (rDown && manager != null) manager.ResetGame();
     }
 
     void FixedUpdate()

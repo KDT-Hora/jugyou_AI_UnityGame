@@ -21,6 +21,11 @@ public class ItemFx : MonoBehaviour
         phase = hueOffset * 6.28f;
     }
 
+    void OnDestroy()
+    {
+        if (mat != null) Destroy(mat);   // renderer.material で作った個別インスタンスを解放
+    }
+
     void Update()
     {
         float t = Time.time;
